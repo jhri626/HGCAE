@@ -1,0 +1,3 @@
+[submodule "hyperbolic_representation_learning"]
+	path = hyperbolic_representation_learning
+	url = https://github.com/JungbinLim/hyperbolic_representation_learning.git

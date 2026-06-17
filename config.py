@@ -24,7 +24,13 @@ config_args = {
         'grad-clip': (None, 'max norm for gradient clipping, or None for no gradient clipping'),
         'min-epochs': (100, 'do not early stop before min-epochs'),
         'lambda-rec': (1.0, 'loss weight for reconstruction task.'),
-        'lambda-lp': (1.0, 'lp loss weight. Used with lambda_lp=0 for HNN + rec decoder without lp loss')
+        'lambda-lp': (1.0, 'lp loss weight. Used with lambda_lp=0 for HNN + rec decoder without lp loss'),
+        'lambda-iso': (0.0, 'loss weight for graph-distance isometry regularization'),
+        'iso-sample-size': (512, 'number of nodes sampled for isometry loss; 0 uses all nodes'),
+        'iso-bandwidth': (4.0, 'fixed heat-kernel bandwidth for isometry graph Laplacian'),
+        'iso-bandwidth-method': ('fixed', 'bandwidth mode for isometry loss: fixed or median_heuristic'),
+        'iso-measure': ('relaxed_distortion', 'isometry measure: relaxed_distortion, least_squares_distortion, harmonic_mapping_distortion'),
+        'iso-chart': ('poincare', 'latent chart metric used by isometry loss: poincare or euclidean')
     },
     'model_config': {
         'model': ('HGCAE', 'which encoder to use, can be any of [Shallow, MLP, HNN, GCN, GAT]'),

@@ -9,6 +9,7 @@ from models.decoders import model2decoder
 from layers.layers import FermiDiracDecoder, InnerProductDecoder
 from sklearn.metrics import roc_auc_score, average_precision_score
 from utils.eval_utils import acc_f1
+from utils.isometry_utils import graph_isometry_loss
 from sklearn import cluster
 from sklearn.metrics import accuracy_score, normalized_mutual_info_score, adjusted_rand_score
 
@@ -49,6 +50,13 @@ class BaseModel(nn.Module):
     def encode(self, x, adj):
         h = self.encoder.encode(x, adj)
         return h
+
+    def get_embedding_curvature(self):
+        if self.manifold_name == 'PoincareBall' and hasattr(self.encoder, 'layers') and len(self.encoder.layers) > 0:
+            last_layer = self.encoder.layers[-1]
+            if hasattr(last_layer, 'hyp_act') and last_layer.hyp_act.c_out is not None:
+                return last_layer.hyp_act.c_out
+        return self.c
 
     def pred_link_score(self, h, idx):  # for LP,REC 
         if self.manifold_name == 'Euclidean':
@@ -172,6 +180,17 @@ class LPModel(BaseModel):
         else:
             self.lambda_lp = 0
 
+        self.lambda_iso = args.lambda_iso if args.lambda_iso > 0 else 0
+        self.iso_sample_size = args.iso_sample_size
+        self.iso_bandwidth = args.iso_bandwidth
+        self.iso_bandwidth_method = args.iso_bandwidth_method
+        self.iso_measure = args.iso_measure
+        self.iso_chart = args.iso_chart
+        if self.lambda_iso > 0 and self.iso_chart == 'poincare' and args.manifold != 'PoincareBall':
+            raise RuntimeError('Poincare isometry regularization requires --manifold PoincareBall')
+        if self.lambda_iso > 0 and self.iso_bandwidth_method == 'fixed' and self.iso_bandwidth <= 0:
+            raise RuntimeError('--iso-bandwidth must be positive when --iso-bandwidth-method fixed')
+
     def compute_metrics(self, embeddings, data, split, epoch=None):
         if split == 'train':
             num_true_edges = data[f'{split}_edges'].shape[0]
@@ -214,6 +233,24 @@ class LPModel(BaseModel):
             assert not torch.isnan(loss_rec).any()
             loss_lp = loss * self.lambda_lp
             metrics.update({'loss': loss_lp + loss_rec, 'loss_rec': loss_rec, 'loss_lp': loss_lp})
+
+        if split == 'train' and self.lambda_iso:
+            if 'graph_dist' not in data:
+                raise RuntimeError('Missing graph_dist. Set --lambda-iso only after enabling distance preprocessing.')
+            loss_iso_raw = graph_isometry_loss(
+                    embeddings,
+                    data['graph_dist'],
+                    curvature=self.get_embedding_curvature(),
+                    sample_size=self.iso_sample_size,
+                    bandwidth_method=self.iso_bandwidth_method,
+                    bandwidth=self.iso_bandwidth,
+                    measure=self.iso_measure,
+                    chart=self.iso_chart,
+            )
+            assert not torch.isnan(loss_iso_raw).any()
+            loss_iso = self.lambda_iso * loss_iso_raw
+            metrics['loss'] = metrics['loss'] + loss_iso
+            metrics.update({'loss_iso': loss_iso, 'loss_iso_raw': loss_iso_raw})
 
         return metrics
 

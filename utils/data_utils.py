@@ -10,6 +10,7 @@ import torch
 
 from scipy import sparse
 import logging
+from utils.isometry_utils import compute_shortest_path_distance
 
 def load_data(args, datapath):
     ## Load data
@@ -65,6 +66,16 @@ def load_data(args, datapath):
     if args.val_prop + args.test_prop > 0:
         data['val_edges'], data['val_edges_false'] = val_edges, val_edges_false
         data['test_edges'], data['test_edges_false'] = test_edges, test_edges_false
+
+    if getattr(args, 'lambda_iso', 0) > 0:
+        graph_dist_path = os.path.join(cached_dir, 'graph_dist.npy')
+        if not os.path.isfile(graph_dist_path):
+            logging.info('Computing graph shortest-path distance for isometry regularization')
+            graph_dist = compute_shortest_path_distance(adj_train)
+            np.save(graph_dist_path, graph_dist)
+        else:
+            logging.info('Loading graph shortest-path distance from `{}`'.format(graph_dist_path))
+        data['graph_dist'] = np.load(graph_dist_path, mmap_mode='r')
     all_info=""
 
     ## Adj matrix
