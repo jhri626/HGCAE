@@ -34,7 +34,7 @@ def get_dir_name(models_dir):
                     for d in os.listdir(models_dir)
                     if os.path.isdir(os.path.join(models_dir, d))
                     ]
-        ).astype(np.int)
+        ).astype(int)
         if len(existing_dirs) > 0:
             dir_id = str(existing_dirs.max() + 1)
         else:
@@ -126,5 +126,4 @@ def assign_gpus(num_gpu, memory_threshold=1000):    # (MiB)
     gpus_to_assign = available_gpus[:num_gpu]
     # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(gpus_to_assign)
     return gpus_to_assign
-
 

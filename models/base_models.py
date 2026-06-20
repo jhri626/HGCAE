@@ -98,8 +98,7 @@ class BaseModel(nn.Module):
         embeddings_to_cluster = embeddings[idx].detach().cpu().numpy()
         gt_label = data['labels'][idx].cpu().numpy()
 
-        kmeans = cluster.KMeans(n_clusters=n_classes, algorithm='auto')
-        kmeans.fit(embeddings_to_cluster)
+        kmeans = cluster.KMeans(n_clusters=n_classes, algorithm='lloyd')
         pred_label = kmeans.fit_predict(embeddings_to_cluster)
 
         from munkres import Munkres

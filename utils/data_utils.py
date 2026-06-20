@@ -12,6 +12,21 @@ from scipy import sparse
 import logging
 from utils.isometry_utils import compute_shortest_path_distance
 
+
+def get_cache_root():
+    return os.environ.get('HGCAE_CACHE_DIR', os.path.join(os.getcwd(), 'cache'))
+
+
+def is_edge_cache_complete(cached_dir, use_eval_edges):
+    required_files = ['adj_train.npz', 'train_edges.pth', 'train_edges_false.pth', 'np_state.npy']
+    if use_eval_edges:
+        required_files += ['val_edges.pth', 'val_edges_false.pth', 'test_edges.pth', 'test_edges_false.pth']
+    return all(
+            os.path.isfile(os.path.join(cached_dir, filename)) and os.path.getsize(os.path.join(cached_dir, filename)) > 0
+            for filename in required_files
+    )
+
+
 def load_data(args, datapath):
     ## Load data
     data = load_data_lp(args.dataset, args.use_feats, datapath)
@@ -23,16 +38,17 @@ def load_data(args, datapath):
         task = 'nc'
     else:
         task = 'lp'
-    cached_dir = os.path.join('/root/tmp', task, args.dataset,
+    cached_dir = os.path.join(get_cache_root(), task, args.dataset,
             f"seed{args.split_seed}-val{args.val_prop}-test{args.test_prop}")
 
-    if not os.path.isdir(cached_dir):
+    use_eval_edges = args.val_prop + args.test_prop > 0
+    if not is_edge_cache_complete(cached_dir, use_eval_edges):
         logging.info(f"Caching at `{cached_dir}`randomly masked edges")
         os.makedirs(cached_dir, exist_ok=True)
         adj_train, train_edges, train_edges_false, val_edges, val_edges_false, test_edges, test_edges_false = mask_edges(
                 adj, args.val_prop, args.test_prop, args.split_seed
         )
-        if args.val_prop + args.test_prop > 0:
+        if use_eval_edges:
             torch.save(val_edges, os.path.join(cached_dir, 'val_edges.pth'))
             torch.save(val_edges_false, os.path.join(cached_dir, 'val_edges_false.pth'))
             torch.save(test_edges, os.path.join(cached_dir, 'test_edges.pth'))
@@ -43,11 +59,11 @@ def load_data(args, datapath):
         sparse.save_npz(os.path.join(cached_dir, "adj_train.npz"), adj_train)
 
         st0 = np.random.get_state()
-        np.save(os.path.join(cached_dir, 'np_state.npy'), st0)
+        np.save(os.path.join(cached_dir, 'np_state.npy'), np.array(st0, dtype=object), allow_pickle=True)
 
     else:
         logging.info(f"Loading from `{cached_dir}` randomly masked edges")
-        if args.val_prop + args.test_prop > 0:
+        if use_eval_edges:
             val_edges = torch.load(os.path.join(cached_dir, 'val_edges.pth'))
             val_edges_false = torch.load(os.path.join(cached_dir, 'val_edges_false.pth'))
             test_edges = torch.load(os.path.join(cached_dir, 'test_edges.pth'))
@@ -57,13 +73,13 @@ def load_data(args, datapath):
         train_edges = torch.load(os.path.join(cached_dir, 'train_edges.pth'))
         train_edges_false = torch.load(os.path.join(cached_dir, 'train_edges_false.pth'))
 
-        st0 = np.load(os.path.join(cached_dir, 'np_state.npy'))
+        st0 = tuple(np.load(os.path.join(cached_dir, 'np_state.npy'), allow_pickle=True))
         np.random.set_state(st0)
 
     ## TAKES a lot of time
     data['adj_train'] = adj_train
     data['train_edges'], data['train_edges_false'] = train_edges, train_edges_false
-    if args.val_prop + args.test_prop > 0:
+    if use_eval_edges:
         data['val_edges'], data['val_edges_false'] = val_edges, val_edges_false
         data['test_edges'], data['test_edges_false'] = test_edges, test_edges_false
 
@@ -223,7 +239,7 @@ def load_data_lp(dataset, use_feats, data_path):
             name = 'Pubmed'
         else:
             raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
-        loaded_dataset = Planetoid(root='/root/tmp/'+name, name='Cora')
+        loaded_dataset = Planetoid(root=os.path.join(get_cache_root(), name), name='Cora')
         adj = tg.utils.to_scipy_sparse_matrix(loaded_dataset.data.edge_index)
         adj = sp.coo_matrix.asformat(adj, format='csr')
         features = sp.lil_matrix(loaded_dataset.data.x.numpy())
@@ -238,7 +254,7 @@ def load_data_lp(dataset, use_feats, data_path):
             name = 'Computers'
         else:
             raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
-        loaded_dataset = Amazon(root='/root/tmp/' + name, name=name)
+        loaded_dataset = Amazon(root=os.path.join(get_cache_root(), name), name=name)
         adj = tg.utils.to_scipy_sparse_matrix(loaded_dataset.data.edge_index)
         adj = sp.coo_matrix.asformat(adj, format='csr')
         features = sp.lil_matrix(loaded_dataset.data.x.numpy())
